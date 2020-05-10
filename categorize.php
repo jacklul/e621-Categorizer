@@ -840,6 +840,18 @@ foreach ($files as $file) {
                         echo 'Multiple images matched!' . PHP_EOL;
 
                         $destinationDirectory = '! To check';
+                        $debugFile = PATH . DS . $destinationDirectory . DS . $file . '.txt';
+
+                        $debugData = '';
+                        foreach ($reverse_search as $result) {
+                            $debugData .= 'https://e621.net/posts/' . $result . PHP_EOL;
+                        }
+
+                        if (!is_dir($concurrentDirectory = dirname($debugFile)) && !mkdir($concurrentDirectory, 0755, true) && !is_dir($concurrentDirectory)) {
+                            throw new RuntimeException(sprintf('Directory "%s" was not created', $concurrentDirectory));
+                        }
+
+                        file_put_contents($debugFile, trim($debugData) . PHP_EOL);
                     }
                 }
             } else {
