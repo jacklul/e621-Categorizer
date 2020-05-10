@@ -833,7 +833,13 @@ foreach ($files as $file) {
                 if (!empty($reverse_search)) {
                     $reverse_search = array_unique($reverse_search);
 
-                    $destinationDirectory = categorize($file_path, $reverse_search[0]);
+                    if (count($reverse_search) === 1) {
+                        $destinationDirectory = categorize($file_path, $reverse_search[0]);
+                    } else {
+                        echo 'Multiple images matched!' . PHP_EOL;
+
+                        $destinationDirectory = '! To check';
+                    }
                 }
             } else {
                 $destinationDirectory = '! Error';
