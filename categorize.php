@@ -417,8 +417,6 @@ function checkForInteractionTag(array $tags)
 
     // This usually means post was incorrectly tagged or is missing 'group' tag
     if (count($found) > 1) {
-        echo 'Multiple action tags matched: ' . implode(', ', $found) . PHP_EOL;
-
         return $found;
     }
 
@@ -512,29 +510,32 @@ function categorize($file, $post_id)
 
         if (isset($tagsAsOneArray)) {
             if (in_array('solo', $tagsAsOneArray, true)) {
-                $interaction = 'Solo';
+                echo 'Interaction: ' . ($interaction = 'Solo') . PHP_EOL;
+
                 $gender = checkForGenderTag($tagsAsOneArray);
 
                 if (empty($gender)) {
-                    echo 'Missing gender tag!' . PHP_EOL;
-
                     $interaction .= DS . '! No gender';
-                } else {
-                    echo 'Gender: ' . $gender . PHP_EOL;
 
+                    echo 'Missing gender tag!' . PHP_EOL;
+                } else {
                     $interaction .= DS . $gender;
+
+                    echo 'Gender: ' . $gender . PHP_EOL;
                 }
             } else {
                 $interactionTag = checkForInteractionTag($tagsAsOneArray);
 
                 if (!is_array($interactionTag) && !empty($interactionTag)) {
                     $interaction = $interactionTag;
-                }
 
-                if (is_array($interactionTag)) {
+                    echo 'Interaction: ' . $interaction . PHP_EOL;
+                } elseif (is_array($interactionTag)) {
                     $interaction = '! Conflict';
 
-                    $debugData = 'Multiple action tags matched: ' . PHP_EOL . implode(PHP_EOL, $interactionTag);
+                    echo 'Conflict: ' . implode(', ', $interactionTag) . PHP_EOL;
+
+                    $debugData = 'Multiple interaction tags matched: ' . PHP_EOL . implode(PHP_EOL, $interactionTag);
                     $debugData .= PHP_EOL . PHP_EOL . 'Tags: ' . print_r($tagsAsOneArray, true);
                 }
             }
@@ -545,18 +546,10 @@ function categorize($file, $post_id)
         } else {
             $destinationDirectory = $interaction;
         }
-
-        echo 'Interaction: ' . trim(str_replace('! ', '', $interaction)) . PHP_EOL;
     }
 
     if (isset($debugData) && !empty($debugData)) {
-        $debugFile = PATH . DS . $destinationDirectory . DS . basename($file) . '.txt';
-
-        if (!is_dir($concurrentDirectory = dirname($debugFile)) && !mkdir($concurrentDirectory, 0755, true) && !is_dir($concurrentDirectory)) {
-            throw new RuntimeException(sprintf('Directory "%s" was not created', $concurrentDirectory));
-        }
-
-        file_put_contents($debugFile, $debugData . PHP_EOL);
+        writeToTxt(PATH . DS . $destinationDirectory . DS . basename($file) . '.txt', $debugData . PHP_EOL);
     }
 
     return $destinationDirectory;
@@ -583,6 +576,21 @@ function safeRename($from, $to)
     }
 
     return rename($from, $to);
+}
+
+/**
+ * @param $file
+ * @param $contents
+ *
+ * @return false|int
+ */
+function writeToTxt($file, $contents)
+{
+    if (!is_dir($concurrentDirectory = dirname($file)) && !mkdir($concurrentDirectory, 0755, true) && !is_dir($concurrentDirectory)) {
+        throw new RuntimeException(sprintf('Directory "%s" was not created', $concurrentDirectory));
+    }
+
+    return file_put_contents($file, $contents);
 }
 
 /**
@@ -837,21 +845,16 @@ foreach ($files as $file) {
                     if (count($reverse_search) === 1) {
                         $destinationDirectory = categorize($file_path, $reverse_search[0]);
                     } else {
-                        echo 'Multiple images matched!' . PHP_EOL;
-
                         $destinationDirectory = '! To check';
-                        $debugFile = PATH . DS . $destinationDirectory . DS . $file . '.txt';
+
+                        echo 'Multiple posts matched!' . PHP_EOL;
 
                         $debugData = '';
                         foreach ($reverse_search as $result) {
                             $debugData .= 'https://e621.net/posts/' . $result . PHP_EOL;
                         }
 
-                        if (!is_dir($concurrentDirectory = dirname($debugFile)) && !mkdir($concurrentDirectory, 0755, true) && !is_dir($concurrentDirectory)) {
-                            throw new RuntimeException(sprintf('Directory "%s" was not created', $concurrentDirectory));
-                        }
-
-                        file_put_contents($debugFile, trim($debugData) . PHP_EOL);
+                        writeToTxt(PATH . DS . $destinationDirectory . DS . $file . '.txt', trim($debugData) . PHP_EOL);
                     }
                 }
             } else {
