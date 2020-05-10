@@ -660,7 +660,7 @@ if (file_exists(__DIR__ . DS . 'config.cfg')) {
 for ($i = 1, $iMax = count($argv); $i < $iMax; $i++) {
     if (is_dir($argv[$i])) {
         if (isset($targetPath)) {
-            echo 'Target path is already set!';
+            echo 'Target path is already set!' . PHP_EOL;
             exit(1);
         }
 
@@ -671,7 +671,7 @@ for ($i = 1, $iMax = count($argv); $i < $iMax; $i++) {
         $file = explode('.', basename($argv[$i]));
 
         if ($file[1] !== 'cfg') {
-            echo 'File is not a config file type (.cfg): ' . $argv[$i];
+            echo 'File is not a config file type (.cfg): ' . $argv[$i] . PHP_EOL;
             exit(1);
         }
 
@@ -691,15 +691,15 @@ if (!isset($targetPath)) {
 
     if (empty($targetPath)) {
         $targetPath = $cwd;
-
-        echo 'Using current working path: ' . $targetPath . PHP_EOL;
     }
 
     if (!is_dir(trim($targetPath))) {
-        echo 'Invalid path!';
+        echo 'Invalid path!' . PHP_EOL;
         exit(1);
     }
 }
+
+echo 'Using path: ' . realpath($targetPath) . PHP_EOL;
 
 // Ask if reverse search should be used
 if ($config['REVERSE_SEARCH'] === null) {
@@ -802,6 +802,7 @@ echo PHP_EOL;
 
 // Do the actual thing
 $i = 0;
+
 foreach ($files as $file) {
     $i++;
 
