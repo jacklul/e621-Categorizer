@@ -286,7 +286,7 @@ function reverseSearch($file, $isRetry = false)
             ($response = $e->getResponse()) &&
             $response->getStatusCode() === 429
         ) {
-            echo "\r" . $buffer . ' Throttled, retrying...' . PHP_EOL;
+            echo "\r" . $buffer . ' throttled, retrying...' . PHP_EOL;
 
             sleep(1);
             return reverseSearch($file, true);
