@@ -322,7 +322,7 @@ function getTagsAsOneArray(array $tags)
 /**
  * @param array $tags
  *
- * @return string
+ * @return string|array
  */
 function checkForGenderTag(array $tags)
 {
@@ -336,14 +336,23 @@ function checkForGenderTag(array $tags)
         'ambiguous_gender' => 'ambiguous',
     ];
 
+    $found = [];
     foreach ($genderTags as $genderTag => $genderName) {
         if (is_numeric($genderTag)) {
             $genderTag = $genderName;
         }
 
         if (in_array($genderTag, $tags, true)) {
-            return ucfirst($genderName);
+            $found[] = ucfirst($genderName);
         }
+    }
+
+    if (count($found) === 1) {
+        return $found[0];
+    }
+
+    if (count($found) > 1) {
+        return $found;
     }
 
     return '';
@@ -412,6 +421,10 @@ function checkForInteractionTag(array $tags)
     }
 
     if ($hasGroupTag === true) {
+        if (count($found) === 1) {
+            return 'Multiple characters' . DS . $found[0];
+        }
+
         return 'Multiple characters';
     }
 
@@ -514,29 +527,46 @@ function categorize($file, $post_id)
 
                 $gender = checkForGenderTag($tagsAsOneArray);
 
-                if (empty($gender)) {
-                    $interaction .= DS . 'Unknown';
+                if (is_array($gender)) {
+                    $interaction .= DS . '! Conflict';
 
-                    echo 'Missing gender tag!' . PHP_EOL;
-                } else {
+                    echo 'Conflict: ' . implode(', ', $gender) . PHP_EOL;
+
+                    $debugData = 'Multiple gender tags matched: ' . PHP_EOL . implode(PHP_EOL, $gender);
+                    $debugData .= PHP_EOL . PHP_EOL . 'Tags: ' . print_r($tagsAsOneArray, true);
+                } elseif (!empty($gender)) {
                     $interaction .= DS . $gender;
 
                     echo 'Gender: ' . $gender . PHP_EOL;
+                } else {
+                    $interaction .= DS . 'Unknown';
+
+                    echo 'Missing gender tag!' . PHP_EOL;
                 }
             } else {
                 $interactionTag = checkForInteractionTag($tagsAsOneArray);
 
-                if (!is_array($interactionTag) && !empty($interactionTag)) {
-                    $interaction = $interactionTag;
-
-                    echo 'Interaction: ' . $interaction . PHP_EOL;
-                } elseif (is_array($interactionTag)) {
+                if (is_array($interactionTag)) {
                     $interaction = '! Conflict';
 
                     echo 'Conflict: ' . implode(', ', $interactionTag) . PHP_EOL;
 
                     $debugData = 'Multiple interaction tags matched: ' . PHP_EOL . implode(PHP_EOL, $interactionTag);
                     $debugData .= PHP_EOL . PHP_EOL . 'Tags: ' . print_r($tagsAsOneArray, true);
+                } elseif (!empty($interactionTag)) {
+                    $interaction = $interactionTag;
+
+                    if (strpos($interaction, DS) === false && in_array('solo_focus', $tagsAsOneArray, true)) {
+                        $interaction .= DS . 'Solo focus';
+
+                        $gender = checkForGenderTag($tagsAsOneArray);
+
+                        if (!is_array($gender) && !empty($gender)) {
+                            $interaction .= DS . $gender;
+                        }
+                    }
+
+                    echo 'Interaction: ' . $interaction . PHP_EOL;
                 }
             }
         }
