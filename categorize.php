@@ -515,7 +515,7 @@ function categorize($file, $post_id)
                 $gender = checkForGenderTag($tagsAsOneArray);
 
                 if (empty($gender)) {
-                    $interaction .= DS . '! No gender';
+                    $interaction .= DS . 'Unknown';
 
                     echo 'Missing gender tag!' . PHP_EOL;
                 } else {
