@@ -292,7 +292,7 @@ function reverseSearch($file, $isRetry = false)
             return reverseSearch($file, true);
         }
 
-        echo "\r" . $buffer . ' exception' . PHP_EOL . $e->getMessage();
+        echo "\r" . $buffer . ' exception' . PHP_EOL . trim($e->getMessage());
     }
 
     return false;
