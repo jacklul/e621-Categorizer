@@ -192,6 +192,45 @@ function getPostTags($post_id)
 }
 
 /**
+ * @param $file
+ *
+ * @return false|resource
+ */
+function convertImage($file)
+{
+    if ((is_bool(CONVERT) && CONVERT === false) || (is_int(CONVERT) && CONVERT > filesize($file))) {
+        return file_get_contents($file);
+    }
+
+    global $fileContentsCache;
+
+    if ($fileContentsCache !== null) {
+        return $fileContentsCache;
+    }
+
+    $mime_type = mime_content_type($file);
+
+    if ($mime_type === 'image/png') {
+        $image = imagecreatefrompng($file);
+    } elseif ($mime_type === 'image/jpeg') {
+        $image = imagecreatefromjpeg($file);
+    } elseif ($mime_type === 'image/gif') {
+        $image = imagecreatefromgif($file);
+    }
+
+    if (isset($image) && $image !== false) {
+        ob_start();
+        imagejpeg($image, null, 90);
+        $file_contents = ob_get_clean();
+
+        imagedestroy($image);
+        return $file_contents;
+    }
+
+    return null;
+}
+
+/**
  * @param string $file
  * @param bool   $isRetry
  *
@@ -202,23 +241,9 @@ function reverseSearch($file, $isRetry = false)
     global $client, $buffer, $lastRequest;
 
     try {
-        $mime_type = mime_content_type($file);
+        $image = convertImage($file);
 
-        if ($mime_type === 'image/png') {
-            $image = imagecreatefrompng($file);
-        } elseif ($mime_type === 'image/jpeg') {
-            $image = imagecreatefromjpeg($file);
-        } elseif ($mime_type === 'image/gif') {
-            $image = imagecreatefromgif($file);
-        }
-
-        if (isset($image)) {
-            ob_start();
-            imagejpeg($image, null, 90);
-            $contents = ob_get_clean();
-
-            imagedestroy($image);
-        } else {
+        if ($image === null) {
             echo "\r" . $buffer . ' file conversion failed';
 
             return false;
@@ -228,7 +253,7 @@ function reverseSearch($file, $isRetry = false)
             'multipart' => [
                 [
                     'name'     => 'file',
-                    'contents' => $contents,
+                    'contents' => $image,
                     'filename' => 'image.jpg',
                 ],
             ],
@@ -295,6 +320,19 @@ function reverseSearch($file, $isRetry = false)
         echo "\r" . $buffer . ' exception' . PHP_EOL . trim($e->getMessage());
     }
 
+    return false;
+}
+
+/**
+ * @param string $file
+ * @param bool   $isRetry
+ *
+ * @return array|bool
+ * @noinspection PhpUnusedParameterInspection
+ */
+function reverseSearch2($file, $isRetry = false)
+{
+    // Placeholder for the future
     return false;
 }
 
@@ -680,6 +718,7 @@ function showScanResult($count)
 $config = [
     'LOGIN'            => '',
     'API_KEY'          => '',
+    'CONVERT'          => true,
     'REVERSE_SEARCH'   => null,
     'BY_RATING'        => false,
     'BY_INTERACTION'   => false,
@@ -760,8 +799,15 @@ if ($config['REVERSE_SEARCH'] === null) {
     $config['REVERSE_SEARCH'] = (bool)$config['REVERSE_SEARCH'];    // Make sure value is actually boolean
 }
 
+if (is_numeric($config['CONVERT'])) {
+    $config['CONVERT'] = (int)$config['CONVERT'];
+} else {
+    $config['CONVERT'] = (bool)$config['CONVERT'];
+}
+
 // Define some stuff globally
 define('PATH', $targetPath);
+define('CONVERT', $config['CONVERT']);
 define('REQUIRE_ALL_TAGS', (string)$config['REQUIRE_ALL_TAGS']);
 define('REQUIRE_ONE_TAG', (string)$config['REQUIRE_ONE_TAG']);
 define('BY_RATING', (bool)$config['BY_RATING']);
@@ -865,6 +911,12 @@ foreach ($files as $file) {
         if ($config['REVERSE_SEARCH'] === true) {
             $buffer = 'Trying reverse search...';
             $reverse_search = reverseSearch($file_path);
+
+            /*if (!is_array($reverse_search) || empty($reverse_search)) {
+                $reverse_search = reverseSearch2($file_path);
+            }*/
+
+            $fileContentsCache = null;
 
             echo PHP_EOL;
 
