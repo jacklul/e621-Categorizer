@@ -146,6 +146,28 @@ function batchMd5(array $md5s)
 /**
  * @param int $post_id
  *
+ * @return bool|null
+ */
+function getPostExists($post_id)
+{
+    $result = getPosts(['tags' => 'id:' . $post_id]);
+
+    if (is_array($result)) {
+        if (isset($result['posts'][0]['id'])) {
+            return true;
+        }
+
+        return false;
+    }
+
+    echo 'API failure: ' . ($result['error'] ?: 'Unknown error') . PHP_EOL;
+
+    return null;
+}
+
+/**
+ * @param int $post_id
+ *
  * @return string|bool|null
  */
 function getPostRating($post_id)
@@ -156,8 +178,6 @@ function getPostRating($post_id)
         if (isset($result['posts'][0]['rating'])) {
             return $result['posts'][0]['rating'];
         }
-
-        echo 'Unable to fetch post rating: Post not found' . PHP_EOL;
 
         return false;
     }
@@ -180,8 +200,6 @@ function getPostTags($post_id)
         if (isset($result['posts'][0]['tags'])) {
             return $result['posts'][0]['tags'];
         }
-
-        echo 'Unable to fetch post tags: Post not found' . PHP_EOL;
 
         return false;
     }
@@ -484,8 +502,16 @@ function categorize($file, $post_id)
 {
     $destinationDirectory = '';
 
+    $postExists = getPostExists($post_id);
+
+    if ($postExists !== true) {
+        echo 'Post not found!' . PHP_EOL;
+
+        return '! Not found';
+    }
+
     if (!empty(REQUIRE_ALL_TAGS) || !empty(REQUIRE_ONE_TAG)) {
-        $destinationDirectoryForMissingTags = '! No match';
+        $destinationDirectoryForMissingTags = '! Invalid';
         $tags = getPostTags($post_id);
 
         if (is_array($tags)) {
@@ -537,19 +563,19 @@ function categorize($file, $post_id)
             $destinationDirectory = $ratings[$rating];
 
             echo 'Rating: ' . $destinationDirectory . PHP_EOL;
-        } elseif (!empty($rating)) {
-            echo 'Unknown rating value: ' . $rating . PHP_EOL;
-
-            return '! Error';
         } else {
+            if (!empty($rating)) {
+                echo 'Unknown rating value: ' . $rating . PHP_EOL;
+            }
+
             echo 'Failed to categorize by rating' . PHP_EOL;
 
-            return '! Unknown';
+            return '! Unknown rating';
         }
     }
 
     if (BY_INTERACTION === true) {
-        $interaction = '! Unknown';
+        $interaction = 'Unknown';
 
         if (!isset($tagsAsOneArray)) {
             $tags = getPostTags($post_id);
@@ -904,6 +930,7 @@ foreach ($files as $file) {
 
     if ($post_id) {
         echo 'Found using MD5 search' . PHP_EOL;
+
         $destinationDirectory = categorize($file_path, $post_id);
     } else {
         echo 'Post by MD5 not found: ' . $file_md5 . PHP_EOL;
@@ -927,7 +954,7 @@ foreach ($files as $file) {
                     if (count($reverse_search) === 1) {
                         $destinationDirectory = categorize($file_path, $reverse_search[0]);
                     } else {
-                        $destinationDirectory = '! To check';
+                        $destinationDirectory = '! Multiple matches';
 
                         echo 'Multiple posts matched!' . PHP_EOL;
 
@@ -945,7 +972,7 @@ foreach ($files as $file) {
         }
 
         if (empty($destinationDirectory) && file_exists($file_path)) {
-            $destinationDirectory = '! Unknown';
+            $destinationDirectory = '! Not found';
         }
     }
 
