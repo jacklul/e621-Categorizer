@@ -659,8 +659,9 @@ function safeRename($from, $to)
 {
     if (file_exists($to)) {
         echo 'File already exists: ' . $to . PHP_EOL;
+        $to = PATH . DS . '! Exists' . DS . str_replace(PATH . DS, '', $to);
 
-        return safeRename($from, PATH . DS . 'Exists' . DS . basename($from));
+        return safeRename($from, $to);
     }
 
     $dirname = dirname($to);
