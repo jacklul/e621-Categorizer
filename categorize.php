@@ -7,6 +7,11 @@ use GuzzleHttp\Exception\RequestException;
 
 require __DIR__ . DS . 'vendor' . DS . 'autoload.php';
 
+$cdir = __DIR__;
+if (substr(__DIR__, 0, 4) === 'phar') {
+    $cdir = dirname(str_replace('phar://', '', __DIR__));
+}
+
 $postsCache = [];
 $md5Cache = [];
 $client = null;
@@ -14,6 +19,27 @@ $lastRequest = 0;
 $buffer = '';
 $waitLastTime = 0;
 $waitAnimChar = '|';
+
+if (file_exists($cdir . '/posts.json')) {
+    ini_set('memory_limit', '4G');
+    $loadedPostsJson = true;
+
+    echo 'Loading posts.json...' . PHP_EOL;
+
+    $data = file_get_contents($cdir . '/posts.json');
+    $postsCache = json_decode($data, true);
+    unset($data);
+
+    echo 'Building initial MD5 lookup cache...' . PHP_EOL;
+
+    foreach ($postsCache as $post) {
+        if (!isset($md5Cache[$post['file']['md5']])) {
+            $md5Cache[$post['file']['md5']] = $post['id'];
+        }
+    }
+
+    echo 'Peak memory usage: ' . round(memory_get_peak_usage() / 1048576, 2) . ' MB' . PHP_EOL;
+}
 
 /**
  * @param array $data
@@ -54,6 +80,7 @@ function getPosts(array $data = [], $isRetry = false)
             sleep(1);
         }
 
+        /** @var Client $client */
         $response = $client->request('GET', 'posts.json', ['query' => $data]);
         $lastRequest = time();
 
@@ -150,6 +177,10 @@ function batchMd5(array $md5s)
  */
 function getPostExists($post_id)
 {
+    if (isset($postsCache[$post_id])) {
+        return true;
+    }
+
     $result = getPosts(['tags' => 'id:' . $post_id]);
 
     if (is_array($result)) {
@@ -229,11 +260,11 @@ function convertImage($file)
     $mime_type = mime_content_type($file);
 
     if ($mime_type === 'image/png') {
-        $image = imagecreatefrompng($file);
+        $image = @imagecreatefrompng($file);
     } elseif ($mime_type === 'image/jpeg') {
-        $image = imagecreatefromjpeg($file);
+        $image = @imagecreatefromjpeg($file);
     } elseif ($mime_type === 'image/gif') {
-        $image = imagecreatefromgif($file);
+        $image = @imagecreatefromgif($file);
     }
 
     if (isset($image) && $image !== false) {
@@ -289,7 +320,7 @@ function reverseSearch($file, $isRetry = false)
                 }
 
                 if ($total > 0) {
-                    print(str_repeat(' ', 10) . "\r" . $buffer . ' ' . round(($progress * 100) / $total, 0)) . "% ";
+                    print (str_repeat(' ', 10) . "\r" . $buffer . ' ' . round(($progress * 100) / $total, 0)) . "% ";
                 }
             },
         ];
@@ -298,6 +329,7 @@ function reverseSearch($file, $isRetry = false)
             sleep(1);
         }
 
+        /** @var Client $client */
         $response = $client->request('GET', 'iqdb_queries.json', $request_options);
         $lastRequest = time();
 
@@ -338,19 +370,6 @@ function reverseSearch($file, $isRetry = false)
         echo "\r" . $buffer . ' exception' . PHP_EOL . trim($e->getMessage());
     }
 
-    return false;
-}
-
-/**
- * @param string $file
- * @param bool   $isRetry
- *
- * @return array|bool
- * @noinspection PhpUnusedParameterInspection
- */
-function reverseSearch2($file, $isRetry = false)
-{
-    // Placeholder for the future
     return false;
 }
 
@@ -500,7 +519,7 @@ function checkForInteractionTag(array $tags)
  */
 function categorize($file, $post_id)
 {
-    $destinationDirectory = '';
+    $destinationSubdirectory = '';
 
     $postExists = getPostExists($post_id);
 
@@ -511,7 +530,7 @@ function categorize($file, $post_id)
     }
 
     if (!empty(REQUIRE_ALL_TAGS) || !empty(REQUIRE_ONE_TAG)) {
-        $destinationDirectoryForMissingTags = '! Invalid';
+        $destinationSubdirectoryForMissingTags = '! Invalid';
         $tags = getPostTags($post_id);
 
         if (is_array($tags)) {
@@ -525,7 +544,7 @@ function categorize($file, $post_id)
 
                         echo 'Missing all required tag(s)!' . PHP_EOL;
 
-                        return $destinationDirectoryForMissingTags;
+                        return $destinationSubdirectoryForMissingTags;
                     }
                 }
             }
@@ -544,7 +563,7 @@ function categorize($file, $post_id)
                 if ($found === false) {
                     echo 'Missing required tag(s)!' . PHP_EOL;
 
-                    return $destinationDirectoryForMissingTags;
+                    return $destinationSubdirectoryForMissingTags;
                 }
             }
         }
@@ -560,9 +579,9 @@ function categorize($file, $post_id)
         $rating = getPostRating($post_id);
 
         if (!empty($rating) && isset($ratings[$rating])) {
-            $destinationDirectory = $ratings[$rating];
+            $destinationSubdirectory = $ratings[$rating];
 
-            echo 'Rating: ' . $destinationDirectory . PHP_EOL;
+            echo 'Rating: ' . $destinationSubdirectory . PHP_EOL;
         } else {
             if (!empty($rating)) {
                 echo 'Unknown rating value: ' . $rating . PHP_EOL;
@@ -635,18 +654,60 @@ function categorize($file, $post_id)
             }
         }
 
-        if (!empty($destinationDirectory)) {
-            $destinationDirectory .= DS . $interaction;
+        if (!empty($destinationSubdirectory)) {
+            $destinationSubdirectory .= DS . $interaction;
         } else {
-            $destinationDirectory = $interaction;
+            $destinationSubdirectory = $interaction;
         }
     }
 
     if (isset($debugData) && !empty($debugData)) {
-        writeToTxt(PATH . DS . $destinationDirectory . DS . basename($file) . '.txt', $debugData . PHP_EOL);
+        writeToTxt(SOURCE_PATH . DS . $destinationSubdirectory . DS . basename($file) . '.txt', $debugData . PHP_EOL);
     }
 
-    return $destinationDirectory;
+    return $destinationSubdirectory;
+}
+
+/**
+ * @param string $destinationSubdirectory
+ * @param string $destinationDirectory
+ *
+ * @return string
+ */
+function checkForAlternativeFolderNames($destinationSubdirectory, $destinationDirectory)
+{
+    $destinationSubdirectoryTmp = explode(DS, $destinationSubdirectory);
+
+    $alternativeFoldersMap = [
+        'Explicit' => 'Adult',
+        'Questionable' => 'Mature',
+        'Safe' => 'Clean',
+    ];
+
+    if (isset($alternativeFoldersMap[$destinationSubdirectoryTmp[0]])) {
+        if (is_dir($destinationDirectory . DS . $alternativeFoldersMap[$destinationSubdirectoryTmp[0]])) {
+            $destinationSubdirectoryTmp[0] = $alternativeFoldersMap[$destinationSubdirectoryTmp[0]];
+            $destinationSubdirectory = implode(DS, $destinationSubdirectoryTmp);
+        } else {
+            foreach (scandir($destinationDirectory) as $dir) {
+                if ($dir === '..' || $dir === '.' || !is_dir($destinationDirectory . DS . $dir)) {
+                    continue;
+                }
+
+                if (strpos($dir, $alternativeFoldersMap[$destinationSubdirectoryTmp[0]]) !== false) {
+                    $destinationSubdirectoryTmp[0] = $dir;
+                    $destinationSubdirectory = implode(DS, $destinationSubdirectoryTmp);
+                    break;
+                } elseif (strpos($dir, $destinationSubdirectoryTmp[0]) !== false) {
+                    $destinationSubdirectoryTmp[0] = $dir;
+                    $destinationSubdirectory = implode(DS, $destinationSubdirectoryTmp);
+                    break;
+                }
+            }
+        }
+    }
+
+    return $destinationSubdirectory;
 }
 
 /**
@@ -659,16 +720,18 @@ function safeRename($from, $to)
 {
     if (file_exists($to)) {
         echo 'File already exists: ' . $to . PHP_EOL;
-        $to = PATH . DS . '! Exists' . DS . str_replace(PATH . DS, '', $to);
+        $to = SOURCE_PATH . DS . '! Exists' . DS . str_replace([SOURCE_PATH . DS, TARGET_PATH . DS], '', $to);
 
         return safeRename($from, $to);
     }
 
     $dirname = dirname($to);
 
-    if (!is_dir($dirname) && !mkdir($concurrentDirectory = $dirname, 0755, true) && !is_dir($dirname)) {
+    if (!is_dir($dirname) && !mkdir($dirname, 0755, true) && !is_dir($dirname)) {
         throw new RuntimeException(sprintf('Directory "%s" was not created', $dirname));
     }
+
+    echo 'Move: "' . str_replace(SOURCE_PATH . DS, '', $from) . '" => "' . str_replace([SOURCE_PATH . DS, TARGET_PATH . DS], '', $to) . '"' . PHP_EOL;
 
     return rename($from, $to);
 }
@@ -689,16 +752,16 @@ function writeToTxt($file, $contents)
 }
 
 /**
- * Prints console waiting animation
+ * Returns console waiting animation
  */
 function waitingAnimation()
 {
-    global $buffer, $waitLastTime, $waitAnimChar;
+    global $waitLastTime, $waitAnimChar;
 
     $time = round(microtime(true), 1);
 
     if ($waitLastTime === $time) {
-        return;
+        return $waitAnimChar;
     }
 
     switch ($waitAnimChar) {
@@ -718,7 +781,7 @@ function waitingAnimation()
 
     $waitLastTime = $time;
 
-    echo "\r" . $buffer . $waitAnimChar;
+    return $waitAnimChar;
 }
 
 /**
@@ -729,7 +792,7 @@ function showScanResult($count)
     global $buffer;
 
     $bufferLen = strlen($buffer) + 1;
-    $scanResultStr = 'Found ' . $count . ' file(s).';
+    $scanResultStr = 'Found ' . $count . ' file(s).' . str_repeat(' ', $bufferLen - strlen($count));
     $scanResultLen = strlen($scanResultStr);
 
     $extraStr = '';
@@ -754,21 +817,26 @@ $config = [
 ];
 
 // Load config
-if (file_exists(__DIR__ . DS . 'config.cfg')) {
-    echo 'Loading config: ' . __DIR__ . DS . 'config.cfg' . PHP_EOL;
+if (file_exists($cdir . DS . 'config.cfg')) {
+    echo 'Loading config: ' . $cdir . DS . 'config.cfg' . PHP_EOL;
 
-    $user_config = parse_ini_file(__DIR__ . DS . 'config.cfg');
+    $user_config = parse_ini_file($cdir . DS . 'config.cfg');
     $config = array_merge($config, $user_config);
 }
 
 for ($i = 1, $iMax = count($argv); $i < $iMax; $i++) {
     if (is_dir($argv[$i])) {
         if (isset($targetPath)) {
-            echo 'Target path is already set!' . PHP_EOL;
-            exit(1);
-        }
+            if (isset($sourcePath)) {
+                echo 'Target and source paths are already set!' . PHP_EOL;
+                exit(1);
+            }
 
-        $targetPath = $argv[$i];
+            $sourcePath = $targetPath;
+            $targetPath = $argv[$i];
+        } else {
+            $targetPath = $argv[$i];
+        }
     }
 
     if (is_file($argv[$i])) {
@@ -803,7 +871,15 @@ if (!isset($targetPath)) {
     }
 }
 
-echo 'Using path: ' . realpath($targetPath) . PHP_EOL;
+if (!isset($sourcePath)) {
+    $sourcePath = $targetPath;
+}
+
+echo 'Using target path: ' . realpath($targetPath) . PHP_EOL;
+
+if ($targetPath !== $sourcePath) {
+    echo 'Using source path: ' . realpath($sourcePath) . PHP_EOL;
+}
 
 // Ask if reverse search should be used
 if ($config['REVERSE_SEARCH'] === null) {
@@ -833,7 +909,8 @@ if (is_numeric($config['CONVERT'])) {
 }
 
 // Define some stuff globally
-define('PATH', $targetPath);
+define('SOURCE_PATH', realpath($sourcePath));
+define('TARGET_PATH', realpath($targetPath));
 define('CONVERT', $config['CONVERT']);
 define('REQUIRE_ALL_TAGS', (string)$config['REQUIRE_ALL_TAGS']);
 define('REQUIRE_ONE_TAG', (string)$config['REQUIRE_ONE_TAG']);
@@ -843,11 +920,13 @@ define('BY_INTERACTION', (bool)$config['BY_INTERACTION']);
 echo PHP_EOL;
 
 // Scan the path
-echo $buffer = 'Scanning directory... ';
+echo 'Scanning directory... ';
 
 $files = [];
-foreach (new DirectoryIterator($targetPath) as $file) {
-    waitingAnimation();
+$i = 1;
+foreach (new DirectoryIterator(SOURCE_PATH) as $file) {
+    $buffer = "\r" . 'Scanning directory... ' . $i++ . ' files ';
+    echo "\r" . $buffer . waitingAnimation();
 
     if ($file->isDot() || !$file->isFile() || strpos(mime_content_type($file->getPathname()), 'image') === false) {
         continue;
@@ -875,7 +954,7 @@ if (!empty($config['LOGIN']) && !empty($config['API_KEY'])) {
 $client = new Client($options);
 
 // Make batch md5 search
-if ($totalFiles > 1) {
+if ($totalFiles > 1 && !isset($loadedPostsJson)) {
     echo 'Batch MD5 search...';
 
     $page = 1;
@@ -892,7 +971,7 @@ if ($totalFiles > 1) {
 
         $md5s = [];
         foreach ($new_files as $file) {
-            $file_path = PATH . DS . $file;
+            $file_path = SOURCE_PATH . DS . $file;
 
             if (!is_file($file_path)) {
                 continue;
@@ -917,8 +996,8 @@ $i = 0;
 foreach ($files as $file) {
     $i++;
 
-    $destinationDirectory = '';
-    $file_path = PATH . DS . $file;
+    $destinationSubdirectory = '';
+    $file_path = SOURCE_PATH . DS . $file;
 
     if (!is_file($file_path)) {
         continue;
@@ -932,18 +1011,14 @@ foreach ($files as $file) {
     if ($post_id) {
         echo 'Found using MD5 search' . PHP_EOL;
 
-        $destinationDirectory = categorize($file_path, $post_id);
+        $destinationSubdirectory = categorize($file_path, $post_id);
     } else {
         echo 'Post by MD5 not found: ' . $file_md5 . PHP_EOL;
 
         if ($config['REVERSE_SEARCH'] === true) {
             $buffer = 'Trying reverse search...';
+
             $reverse_search = reverseSearch($file_path);
-
-            /*if (!is_array($reverse_search) || empty($reverse_search)) {
-                $reverse_search = reverseSearch2($file_path);
-            }*/
-
             $fileContentsCache = null;
 
             echo PHP_EOL;
@@ -953,9 +1028,9 @@ foreach ($files as $file) {
                     $reverse_search = array_unique($reverse_search);
 
                     if (count($reverse_search) === 1) {
-                        $destinationDirectory = categorize($file_path, $reverse_search[0]);
+                        $destinationSubdirectory = categorize($file_path, $reverse_search[0]);
                     } else {
-                        $destinationDirectory = '! Multiple matches';
+                        $destinationSubdirectory = '! Multiple matches';
 
                         echo 'Multiple posts matched!' . PHP_EOL;
 
@@ -964,20 +1039,28 @@ foreach ($files as $file) {
                             $debugData .= 'https://e621.net/posts/' . $result . PHP_EOL;
                         }
 
-                        writeToTxt(PATH . DS . $destinationDirectory . DS . $file . '.txt', trim($debugData) . PHP_EOL);
+                        writeToTxt(SOURCE_PATH . DS . $destinationSubdirectory . DS . $file . '.txt', trim($debugData) . PHP_EOL);
                     }
                 }
             } else {
-                $destinationDirectory = '! Error';
+                $destinationSubdirectory = '! Error';
             }
         }
 
-        if (empty($destinationDirectory) && file_exists($file_path)) {
-            $destinationDirectory = '! Not found';
+        if (empty($destinationSubdirectory) && file_exists($file_path)) {
+            $destinationSubdirectory = '! Not found';
         }
     }
 
-    safeRename($file_path, PATH . DS . $destinationDirectory . DS . $file);
+    if (substr($destinationSubdirectory, 0, 1) === '!') {
+        $destinationDirectory = SOURCE_PATH;
+    } else {
+        $destinationDirectory = TARGET_PATH;
+    }
+
+    $destinationSubdirectory = checkForAlternativeFolderNames($destinationSubdirectory, $destinationDirectory);
+
+    safeRename($file_path, $destinationDirectory . DS . $destinationSubdirectory . DS . $file);
 
     echo PHP_EOL;
 }

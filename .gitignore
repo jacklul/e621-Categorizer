@@ -2,3 +2,4 @@
 /images/
 /composer.lock
 /config.cfg
+/*.phar
