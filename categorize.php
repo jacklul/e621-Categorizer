@@ -519,6 +519,8 @@ function checkForInteractionTag(array $tags)
  */
 function categorize($file, $post_id)
 {
+    global $debugData;
+
     $destinationSubdirectory = '';
 
     $postExists = getPostExists($post_id);
@@ -659,10 +661,6 @@ function categorize($file, $post_id)
         } else {
             $destinationSubdirectory = $interaction;
         }
-    }
-
-    if (isset($debugData) && !empty($debugData)) {
-        writeToTxt(SOURCE_PATH . DS . $destinationSubdirectory . DS . basename($file) . '.txt', $debugData . PHP_EOL);
     }
 
     return $destinationSubdirectory;
@@ -998,6 +996,7 @@ foreach ($files as $file) {
 
     $destinationSubdirectory = '';
     $file_path = SOURCE_PATH . DS . $file;
+    $debugData = '';
 
     if (!is_file($file_path)) {
         continue;
@@ -1033,13 +1032,11 @@ foreach ($files as $file) {
                         $destinationSubdirectory = '! Multiple matches';
 
                         echo 'Multiple posts matched!' . PHP_EOL;
-
-                        $debugData = '';
+                        
+                        $debugData = 'Multiple posts matched: ' . PHP_EOL;
                         foreach ($reverse_search as $result) {
                             $debugData .= 'https://e621.net/posts/' . $result . PHP_EOL;
                         }
-
-                        writeToTxt(SOURCE_PATH . DS . $destinationSubdirectory . DS . $file . '.txt', trim($debugData) . PHP_EOL);
                     }
                 }
             } else {
@@ -1061,6 +1058,10 @@ foreach ($files as $file) {
     $destinationSubdirectory = checkForAlternativeFolderNames($destinationSubdirectory, $destinationDirectory);
 
     safeRename($file_path, $destinationDirectory . DS . $destinationSubdirectory . DS . $file);
+
+    if (!empty($debugData)) {
+        writeToTxt($destinationDirectory . DS . $destinationSubdirectory . DS . basename($file) . '.txt', $debugData . PHP_EOL);
+    }
 
     echo PHP_EOL;
 }
