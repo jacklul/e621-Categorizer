@@ -340,6 +340,9 @@ function reverseSearch($file, $isRetry = false)
             if (count($json_result) > 0 && isset($json_result[0]['post_id'])) {
                 $results = [];
                 foreach ($json_result as $result) {
+                    if (count($json_result) > 1 && isset($result['post']['posts']) && empty($result['post']['posts']['file_url']))
+                        continue;
+                        
                     $results[] = $result['post_id'];
                 }
 
